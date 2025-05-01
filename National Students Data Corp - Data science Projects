@@ -1,0 +1,367 @@
+## Explorer Transportation Data Science Project Jan 3 - Jan 27 2025
+#### Analysis Completed by: George Musabandesu
+
+#### Data Source: 
+https://data.sfgov.org/Public-Safety/Traffic-Crashes-Resulting-in-Injury/ubvf-ztfx/about_data?utm_source=chatgpt.com
+
+This dataset contains all crashes resulting in an injury in the City of San Francisco. Its a compilation of data from various sources. Fatality year-to-date crash data is obtained from the Office of the Chief Medical Examiner (OME) death records, and only includes those cases that meet the San Francisco Vision Zero Fatality Protocol maintained by the San Francisco Department of Public Health (SFDPH), San Francisco Police Department (SFPD), and San Francisco Municipal Transportation Agency (SFMTA). Injury crash data is obtained from SFPD’s Interim Collision System for 2018 through the current year-to-date, Crossroads Software Traffic Collision Database (CR) for years 2013-2017 and the Statewide Integrated Transportation Record System (SWITRS) maintained by the California Highway Patrol for all years prior to 2013. Collision injury data is queried and aggregated on a quarterly basis. Crashes occurring at complex intersections with multiple roadways are mapped onto a single point and injury and fatality crashes occurring on highways are excluded.
+
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+from statsmodels.tsa.seasonal import seasonal_decompose
+import folium
+
+data = pd.read_csv('Traffic_Crashes_Resulting_in_Injury_20250115.csv')
+
+# Looking at the first 5 rows of the dataset
+data.head(5)
+
+# Disabling Scientific notation before using the .describe() function to get summary statistics
+pd.set_option('display.float_format', lambda x: '%.2f' % x)
+
+# Summary statistics
+data.describe()
+
+unique_id is a unique identifier for each crash.  
+Number of persons injured: On everage, each crash has around 1.25 persons injured with the maximum number of injuries at 19  
+Number of persons killed: On average, each crash has around 0.01 deaths per crash. The maximum number of deaths in one crash is 3.  
+tb_latitude and tb_longitude give the actual location of the collision. There are does not seem to be missing values in this column
+
+# Looking at the number of collisions given weather conditions
+data['weather_2'].value_counts()
+
+# Filtering out rare weather categories
+weather_counts = data['weather_2'].value_counts()
+
+# Removing all weather conditions with a value less than 2 occurrences
+relevant_weather = weather_counts[weather_counts>2].index
+filtered_data = data[data['weather_2'].isin(relevant_weather)]
+
+# Looking at the filterd data
+filtered_data.head()
+
+# Bar chart of top weather factors
+top_weather_factors = data['weather_2'].value_counts().head(10)
+
+plt.figure(figsize = (12,7))
+sns.barplot(x = top_weather_factors.index, y = top_weather_factors.values, palette = 'magma')
+plt.title("Top 10 Contributing Weather Conditions to crashes")
+plt.xlabel("Contributing Weather Element", fontsize=14)
+plt.ylabel("Count", fontsize = 14)
+plt.xticks(rotation = 45, ha = 'right')
+plt.tight_layout()
+plt.show()
+
+# Looking at number of collisions and prevailing weather conditions
+filtered_data['weather_2'].value_counts()
+
+A huge portion of collisions do not have weather data included as can be observed from the bar chart and the value counts above. However, rain, wind, and cloudy weather conditions show high collision numbers compared to other weather conditions
+
+# Bar chart of top 10 Collision Factors factors
+top_weather_factors = data['type_of_collision'].value_counts().head(10)
+
+plt.figure(figsize = (12,7))
+sns.barplot(x = top_weather_factors.index, y = top_weather_factors.values, palette = 'magma')
+plt.title("Top 10 Collision-Type Factors to crashes")
+plt.xlabel("Collision Type", fontsize=14)
+plt.ylabel("Count", fontsize = 14)
+plt.xticks(rotation = 45, ha = 'right')
+plt.tight_layout()
+plt.show()
+
+A large portion of the collision types falls under the Broadside category, which means the front side of a vehicle hits the side of another vehicle. (t-bone collision) 
+The other second most collision type involves pedestrians. Rear ends and Sideswipe come in as the third and fourth most collision types.
+
+# Looking at the values in the categories under type of collision
+data['type_of_collision'].value_counts()
+
+#Pie Chart
+collision_types = data['type_of_collision'].value_counts()
+plt.figure(figsize = (8,8))
+collision_types.plot(kind = 'pie', autopct = '%1.1f%%', startangle = 140,
+                     colors = sns.color_palette('pastel'),)
+plt.title('Distribution of collision Types', fontsize=14)
+plt.ylabel('') # hide the y axis
+plt.show()
+
+This pie chart provides another visual summary of the types of collisions
+
+# Pedestrian actions during crash
+pedestrian_action = data['ped_action'].value_counts().head(10)
+
+plt.figure(figsize = (12,7))
+sns.barplot(x = pedestrian_action.index, y = pedestrian_action.values, palette = 'cividis')
+plt.title("Crash-Related Pedestrian Actions ")
+plt.xlabel("Pedestrian Action", fontsize=14)
+plt.ylabel("Count", fontsize = 14)
+plt.xticks(rotation = 45, ha = 'right')
+plt.tight_layout()
+plt.show()
+
+A large portion of collisions do not involve pedestrians (about 75%). Crosswalks at intersections show the most amount of pedestrian-involved collisions.
+
+# #Pie Chart - Pedestrian actions during crash
+# collision_types = data['ped_action'].value_counts()
+# plt.figure(figsize = (8,8))
+# collision_types.plot(kind = 'pie', autopct = '%1.1f%%', startangle = 140,
+#                      colors = sns.color_palette('pastel'), labeldistance = 1.2, pctdistance = 0.8)
+# plt.title('Distribution of Pedestrian Actions during Crash', fontsize=14)
+# plt.ylabel('') # hide the y axis
+# plt.show()
+
+# Bar chart of Collision Severity
+top_weather_factors = data['collision_severity'].value_counts().head(10)
+
+plt.figure(figsize = (12,7))
+sns.barplot(x = top_weather_factors.index, y = top_weather_factors.values, palette = 'magma')
+plt.title("Collision Severity")
+plt.xlabel("Injury Type", fontsize=14)
+plt.ylabel("Count", fontsize = 14)
+plt.xticks(rotation = 45, ha = 'right')
+plt.tight_layout()
+plt.show()
+
+# Looking at the values in each collision category
+data['collision_severity'].value_counts()
+
+# Calculate value counts with percentages
+severity_percentage = data['collision_severity'].value_counts(normalize=True) * 100
+
+# Display the counts and percentages
+severity_percentage_df = severity_percentage.reset_index()
+severity_percentage_df.columns = ['Collision Severity', 'Percentage (%)']
+
+print(severity_percentage_df)
+
+The majority of the parties involved in the collisions sustained some sort of injury. Some of those collisions reported severe injuries and a few others were fatal.
+
+# # Scatter plots
+# # Plot collision severity vs. weather conditions
+# plt.figure(figsize= (10,6))
+# sns.scatterplot(x=data['hour_of_day'], y=data['collision_severity'], 
+#                 hue = filtered_data['weather_2'], palette='magma', 
+#                 alpha = 0.7)
+# plt.title('Collision Severity by Hour of Day and Weather', fontsize=14)
+# plt.xlabel('Hour of Day', fontsize=14)
+# plt.ylabel('Collision Severity', fontsize=14)
+# plt.legend(title='Weather')
+# plt.show()
+
+#Pie Chart - Collision severity
+collision_types = data['collision_severity'].value_counts()
+plt.figure(figsize = (8,8))
+collision_types.plot(kind = 'pie', autopct = '%1.1f%%', startangle = 140,
+                     colors = sns.color_palette('pastel'),labeldistance = 1.2, pctdistance = 0.8)
+plt.title('Distribution of collision severity', fontsize=14)
+plt.ylabel('') # hide the y axis
+plt.show()
+
+Regarding the severity of injury from the collisions, only about 7% of the collision were severe and about 0.9% fatal.
+
+# A sum of all missing values per column
+missing_values = data.isnull().sum()
+
+# Turn missing value counts into percentages
+missing_values_percentage = (missing_values/len(data))*100
+
+# Return counts and percentages of missing values in each column
+missing_data = pd.DataFrame({'missing Values': missing_values, 'Percentage (%)': missing_values_percentage})
+missing_data.sort_values(by = 'Percentage (%)', ascending = False)
+
+Two columns with the highest percentage of missing values are cnn_sgmt_fkey and control_device. These will not be used in the rest of the project
+
+#### Time Series Analysis
+
+# Convert the date and time column to datetime
+data['collision_datetime'] = pd.to_datetime(data['collision_datetime'], format = '%m/%d/%Y %I:%M:%S %p')
+print(data['collision_datetime'].head())
+
+# Extract Hour and month
+data['hour_of_day'] = data['collision_datetime'].dt.hour
+data['month'] = data['collision_datetime'].dt.month_name()
+
+# Grouping the data to calculate the number of collisions by hour and by month
+hourly_collisions = data.groupby('hour_of_day').size()
+
+# Plotting
+import matplotlib.pyplot as plt
+
+plt.figure(figsize = (10,6))
+hourly_collisions.plot(kind = 'bar', color = 'skyblue', edgecolor = 'black')
+plt.title('SF Collisions by Hour of Day')
+plt.xlabel('Hour of Day')
+plt.ylabel('Number of Collisions')
+plt.xticks(rotation = 0)
+plt.grid(axis = 'y', linestyle = '--', alpha = 0.7)
+plt.show()
+
+From 5am to 5pm there is an increase in the number of collisions during the day overall. The numbers slow down after 5pm. This can most likely be attributed to commute traffic at the start of the workday and the end of it.
+
+# Grouping the data to calculate the number of collisions by month
+
+# Order months correctly
+data['month'] = pd.Categorical(data['month'], categories = ['January', 'February', 'March', 'April', 
+                                                            'May', 'June', 'July','August', 'September', 
+                                                            'October', 'November', 'December'],
+                               ordered = True)
+
+monthly_collisions = data.groupby('month').size()
+
+# Plotting
+import matplotlib.pyplot as plt
+
+plt.figure(figsize = (10,6))
+monthly_collisions.plot(kind = 'bar', color = 'lightgreen', edgecolor = 'black')
+plt.title('Collisions by Month')
+plt.xlabel('Month')
+plt.ylabel('Number of Collisions')
+plt.xticks(rotation = 45)
+plt.grid(axis = 'y', linestyle = '--', alpha = 0.7)
+plt.show()
+
+Looking at collisions by month, October shows a slighlty higher number of collisions overall. This could be due to increased traffic for people visiting the city as this is a time of the year that has warm weather.
+
+# Time series showing monthly collisions from 2009 to 2024 for SF
+collisions_monthly = data.set_index('collision_datetime').resample('M').size()
+
+# Plotting
+plt.figure(figsize=(12, 6))
+collisions_monthly.plot(color='orange')
+plt.title('Collisions Over Time (Monthly)')
+plt.xlabel('Time')
+plt.ylabel('Number of Collisions')
+plt.grid(linestyle='--', alpha=0.7)
+plt.show()
+
+
+Collisions had a sharp declined in 2020 most likely due to the COVID-19 pandemic. The numbers rebounded afterwards and appear to match the pre-pandemic levels
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Ensure 'collision_datetime' is in datetime format
+data['collision_datetime'] = pd.to_datetime(data['collision_datetime'])
+
+# Extract the date part from 'collision_datetime' for grouping
+data['collision_date_only'] = data['collision_datetime'].dt.date
+
+# Count the number of crashes per day
+daily_crashes = data.groupby('collision_date_only').size()
+
+# Set plot style
+plt.figure(figsize=(15, 6))
+plt.plot(daily_crashes, label="Daily Crashes")
+plt.title('Daily Motor Vehicle Collisions in San Francisco', fontsize=16)
+plt.xlabel('Date', fontsize=12)
+plt.ylabel('Number of Collisions', fontsize=12)
+plt.xticks(rotation=45)
+plt.grid(axis='y', linestyle='--', alpha=0.7)
+plt.legend()
+plt.tight_layout()
+plt.show()
+
+
+# Decompose the time series
+decompose = seasonal_decompose(daily_crashes, model = 'additive', period = 365)
+
+# Plot of decomposed time series
+fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize = (15,12))
+decompose.trend.plot(ax = ax1)
+ax1.set_title('Trend')
+
+decompose.seasonal.plot(ax = ax2)
+ax2.set_title('Seasonality')
+
+decompose.resid.plot(ax = ax3)
+ax3.set_title('Residuals')
+plt.tight_layout()
+plt.show()
+
+# Adding a column to capture weekly collisions
+data['week_of_day'] = data['collision_datetime'].dt.day_name()
+
+#### Heatmaps and Geospatial maps
+
+#Heatmaps - Timebased heatmap showing collisions by hour of the day and day of the week
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+heatmap_info = data.groupby(['day_of_week', 'hour_of_day']).size().unstack()
+
+# Reorder days of the week
+heatmap_info = heatmap_info.reindex(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
+                                    'Saturday', 'Sunday'])
+
+plt.figure(figsize = (12,8))
+sns.heatmap(heatmap_info, cmap = 'coolwarm', annot=False)
+plt.title('SF Collisions by Day of Week and Hour of day', fontsize = 14)
+plt.xlabel('Hour of Day', fontsize=14)
+plt.ylabel('Day of Week', fontsize=14)
+plt.show()
+
+Monday through Friday show increased collisions aroud 8 am and starting at around 3pm to 7 pm. Friday shows more collisions past 7pm. This maybe due to increased travel going into the weekend.   
+For Saturday, most collisions occur around 11am to midnight. Sunday shows a reduced collision occurence from 1pm to 7pm
+
+#### Geospatial Maps
+
+# Drop rows with missing latitude and longitude values
+data = data.dropna(subset = ['tb_latitude', 'tb_longitude'])
+
+# Creating a heatmap using latitude and longitude variables to see where the most crashes are occuring
+from folium.plugins import HeatMap
+
+# Base map
+m = folium.Map(location =[37.7749, -122.4194], zoom_start=10) # Centered around SF
+
+# Create a heatmap
+sf_heatmap = [[row['tb_latitude'], row['tb_longitude']] for index, row in data.iterrows()]
+HeatMap(sf_heatmap, radius = 15, max_zoom=15).add_to(m)
+m.save('SF_heatmap.html')
+
+The heatmap shows that the skewed intersection of octavia boulevard and market street recorded a high number of collisions. Market street and 5th and Market street and 7th intersections also shows increased collisions. This part of SF has a lot of vehicular and pedestrian activity so
+
+# Severity Mapping
+severity_data = data.sample(n=1000, random_state = 42)
+
+# Base Map
+m_severity = folium.Map(location = [37.7749, -122.4194], zoom_start=10)
+
+# Add crashes to the map with color coding and shape coding based on severity
+for index, row in severity_data.iterrows():
+    if row['number_killed']> 0:
+        color = "red" # Fatalities
+        
+        folium.features.RegularPolygonMarker(
+        location=[row['tb_latitude'], row['tb_longitude']],
+        number_of_sides =3,
+        radius = 5,
+        gradient = False,
+        color=color
+        ).add_to(m_severity)
+    elif row['number_injured']>0:
+        color = "purple" # Injuries
+        folium.CircleMarker(
+        location = [row['tb_latitude'], row['tb_longitude']],
+        radius = 5,
+        color=color,
+        fill=True,
+        fill_color = color
+        ).add_to(m_severity)
+    else:
+        color = "black" # No injuries or fatalities
+        folium.features.RegularPolygonMarker(
+        location= [row['tb_latitude'], row['tb_longitude']],
+        number_of_sides=4,
+        radius=5,
+        gradient = False,
+        color=color,
+        fill=True,
+        fill_color=color
+        ).add_to(m_severity)
+        
+m_severity.save("SF_severity.html")
+
+From the results of the severity map, the north east of SF has the most concentration of collisions. Going northbound on market street, passed its intersection with 11th street, most intersections have a reported collision, with 7th street showing a fatality. There is only a handful of collisions that did not result in any injuries. Most collisions reported some sort of injury.
+
